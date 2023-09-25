@@ -6,6 +6,23 @@ This release includes model weights and starting code for pretrained and fine-tu
 
 This repository is intended as a minimal example to load [Llama 2](https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/) models and run inference. For more detailed examples leveraging Hugging Face, see [llama-recipes](https://github.com/facebookresearch/llama-recipes/).
 
+## Setup with AIME MLC
+Create an AIME ML container:
+```mlc-create mycontainer Pytorch 2.0.1```
+Once done open the container with:
+```mlc-open mycontainer```
+Navigate to the destination of the repo and install the required pip packages
+```
+cd llama2_chat
+pip install -r requirements.txt
+```
+
+## Start Chat in Command Line
+Run the chat mode in the command line with following command:
+```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
+```
+
 ## Updates post-launch
 
 See [UPDATES.md](UPDATES.md). Also for a running list of frequently asked questions, see [here](https://github.com/facebookresearch/llama/blob/main/FAQ.md).

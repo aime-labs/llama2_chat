@@ -56,7 +56,6 @@ class Llama:
         max_seq_len: int,
         max_batch_size: int,
         model_parallel_size: Optional[int] = None,
-        seed: int = 1,
     ) -> "Llama":
         """
         Build a Llama instance by initializing and loading a pre-trained model.
@@ -92,13 +91,17 @@ class Llama:
         torch.cuda.set_device(local_rank)
 
         # seed must be the same in all processes
-        torch.manual_seed(seed)
+        torch.manual_seed(1)
 
         if local_rank > 0:
             sys.stdout = open(os.devnull, "w")
 
         start_time = time.time()
-        checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
+        checkpoints = sorted(Path(ckpt_dir).glob(f'merged.{model_parallel_size}GPUs.*.pth'))
+        if model_parallel_size != len(checkpoints):
+            checkpoints = sorted(Path(ckpt_dir).glob(f'consolidated.*.pth'))
+        print('checkpoints', checkpoints)
+        #checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
         assert len(checkpoints) > 0, f"no checkpoint files found in {ckpt_dir}"
         assert model_parallel_size == len(
             checkpoints
@@ -129,10 +132,13 @@ class Llama:
     @torch.inference_mode()
     def generate(
         self,
-        prompt_tokens: List[List[int]],
+        process_output_callback,
+        prompts: List[str],
         max_gen_len: int,
         temperature: float = 0.6,
         top_p: float = 0.9,
+        top_k: int = 40,
+        repetition_penalty: float = (1.0 / 0.85),
         logprobs: bool = False,
         echo: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
@@ -155,6 +161,8 @@ class Llama:
             If logprobs is True, token log probabilities are computed for each generated token.
 
         """
+
+        prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
         params = self.model.params
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
@@ -165,12 +173,12 @@ class Llama:
         total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
 
         pad_id = self.tokenizer.pad_id
+        
         tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cuda")
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
         if logprobs:
             token_logprobs = torch.zeros_like(tokens, dtype=torch.float)
-
         prev_pos = 0
         eos_reached = torch.tensor([False] * bsz, device="cuda")
         input_text_mask = tokens != pad_id
@@ -182,7 +190,8 @@ class Llama:
                 reduction="none",
                 ignore_index=pad_id,
             )
-
+        word = []
+        generated_text = ""
         for cur_pos in range(min_prompt_len, total_len):
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
@@ -196,7 +205,25 @@ class Llama:
             next_token = torch.where(
                 input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
             )
+            if next_token != self.tokenizer.eos_id:
+                word.append(next_token.item())
+            word_str = self.tokenizer.decode(word)
+            if " " in word_str:
+                text = word_str[:word_str.find(" ") + 1]
+                generated_text += text
+                process_output_callback(generated_text, False)
+                word = word[-1:]
+
+
             tokens[:, cur_pos] = next_token
+            if '\nUser:' in word_str:
+                
+                mask = tokens != -1
+
+                # Use torch.where to replace -1 values with 0
+                tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
+
+                break
             if logprobs:
                 token_logprobs[:, prev_pos + 1 : cur_pos + 1] = -F.cross_entropy(
                     input=logits.transpose(1, 2),
@@ -207,15 +234,23 @@ class Llama:
             eos_reached |= (~input_text_mask[:, cur_pos]) & (
                 next_token == self.tokenizer.eos_id
             )
-            prev_pos = cur_pos
             if all(eos_reached):
                 break
+
+
+            #print('ä', word_str)
+
+
+            prev_pos = cur_pos
+
 
         if logprobs:
             token_logprobs = token_logprobs.tolist()
         out_tokens, out_logprobs = [], []
         for i, toks in enumerate(tokens.tolist()):
             # cut to max gen len
+            final_result = self.tokenizer.decode(toks).strip('User:')
+            process_output_callback(final_result, True)
             start = 0 if echo else len(prompt_tokens[i])
             toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
             probs = None
@@ -226,7 +261,10 @@ class Llama:
                 eos_idx = toks.index(self.tokenizer.eos_id)
                 toks = toks[:eos_idx]
                 probs = probs[:eos_idx] if logprobs else None
+            
             out_tokens.append(toks)
+            output = ''
+            
             out_logprobs.append(probs)
         return (out_tokens, out_logprobs if logprobs else None)
 
