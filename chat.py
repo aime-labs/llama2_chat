@@ -50,7 +50,7 @@ def main():
             
             job_data = api_worker.job_request()
             if local_rank == 0:
-                print('job_data: ', job_data)
+                #print('job_data: ', job_data)
                 callback.job_data = job_data
                 ctx = job_data['text']
                 prompts.append(ctx)
@@ -163,16 +163,16 @@ class ProcessOutputCallback():
         self.local_rank = local_rank
         self.api_worker = api_worker
         self.job_data = None
-        self.progress = 0
 
-    def process_output(self, output, finished):
+
+    def process_output(self, output, num_generated_tokens, finished):
         if self.local_rank == 0:
-            results = {'text':output}
-            self.progress += 0.0001
-            if(finished):
+            results = {'text': output}
+            if finished:
+                self.job_data['num_generated_tokens'] = num_generated_tokens
                 return self.api_worker.send_job_results(self.job_data, results)
-            else:
-                return self.api_worker.send_progress(self.job_data, self.progress, results)
+            else:#if self.api_worker.progress_data_received:
+                return self.api_worker.send_progress(self.job_data, num_generated_tokens, results)
 
 
 class ProcessOutputToShellCallback():

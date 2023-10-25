@@ -192,7 +192,9 @@ class Llama:
             )
         word = []
         generated_text = ""
+        num_generated_tokens = 0
         for cur_pos in range(min_prompt_len, total_len):
+            num_generated_tokens += 1
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
@@ -211,19 +213,16 @@ class Llama:
             if " " in word_str:
                 text = word_str[:word_str.find(" ") + 1]
                 generated_text += text
-                process_output_callback(generated_text, False)
+                process_output_callback(generated_text, num_generated_tokens, False)
                 word = word[-1:]
 
 
             tokens[:, cur_pos] = next_token
-            if '\nUser:' in word_str:
-                
-                mask = tokens != -1
+            mask = tokens != -1
 
-                # Use torch.where to replace -1 values with 0
-                tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
+            # replace -1 values with 2
+            tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
 
-                break
             if logprobs:
                 token_logprobs[:, prev_pos + 1 : cur_pos + 1] = -F.cross_entropy(
                     input=logits.transpose(1, 2),
@@ -231,6 +230,12 @@ class Llama:
                     reduction="none",
                     ignore_index=pad_id,
                 )
+
+
+            prev_pos = cur_pos
+            if '\nUser:' in word_str:
+
+                break
             eos_reached |= (~input_text_mask[:, cur_pos]) & (
                 next_token == self.tokenizer.eos_id
             )
@@ -240,19 +245,13 @@ class Llama:
 
             #print('ä', word_str)
 
-
-            prev_pos = cur_pos
-
-
         if logprobs:
             token_logprobs = token_logprobs.tolist()
         out_tokens, out_logprobs = [], []
         for i, toks in enumerate(tokens.tolist()):
-            # cut to max gen len
-            final_result = self.tokenizer.decode(toks).strip('User:')
-            process_output_callback(final_result, True)
+
             start = 0 if echo else len(prompt_tokens[i])
-            toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
+            #toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
             probs = None
             if logprobs:
                 probs = token_logprobs[i][start : len(prompt_tokens[i]) + max_gen_len]
@@ -261,11 +260,20 @@ class Llama:
                 eos_idx = toks.index(self.tokenizer.eos_id)
                 toks = toks[:eos_idx]
                 probs = probs[:eos_idx] if logprobs else None
+            if self.tokenizer.pad_id in toks:
+                pad_idx = toks.index(self.tokenizer.pad_id)
+                toks = toks[:pad_idx]
+                probs = probs[:pad_idx] if logprobs else None
             
+
+            final_result = self.tokenizer.decode(toks).strip('User:')
+
+            process_output_callback(final_result, num_generated_tokens, True)
             out_tokens.append(toks)
             output = ''
             
             out_logprobs.append(probs)
+        
         return (out_tokens, out_logprobs if logprobs else None)
 
     def text_completion(
