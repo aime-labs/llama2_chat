@@ -9,6 +9,8 @@ import argparse
 from pathlib import Path
 import os
 import torch
+import random
+import numpy as np
 
 WORKER_JOB_TYPE = "llama2"
 WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
@@ -49,8 +51,9 @@ def main():
             prompts = []
             
             job_data = api_worker.job_request()
+            set_seed(job_data.get('seed'))
+            print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
             if local_rank == 0:
-                #print('job_data: ', job_data)
                 callback.job_data = job_data
                 ctx = job_data['text']
                 prompts.append(ctx)
@@ -67,7 +70,7 @@ def main():
             results = generator.generate(
                 callback.process_output, prompts, max_gen_len=512, temperature=temperature, top_p=top_p, top_k=top_k, repetition_penalty=args.repetition_penalty
             )
-
+            print('Done')
             ctx = results[0]
     else:
         callback = ProcessOutputToShellCallback()
@@ -97,6 +100,12 @@ Dave: How can I assist you today?
             ctx = callback.ctx
             
 
+
+def set_seed(seed):
+
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 def load_flags():
