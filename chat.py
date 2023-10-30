@@ -180,7 +180,7 @@ class ProcessOutputCallback():
             if finished:
                 self.job_data['num_generated_tokens'] = num_generated_tokens
                 return self.api_worker.send_job_results(self.job_data, results)
-            else:#if self.api_worker.progress_data_received:
+            elif self.api_worker.progress_data_received:
                 return self.api_worker.send_progress(self.job_data, num_generated_tokens, results)
 
 
