@@ -188,8 +188,8 @@ class ProcessOutputToShellCallback():
     def __init__(self):
         self.ctx = ""
 
-    def process_output(self, output, final):
-        if final:
+    def process_output(self, output, num_generated_tokens, finished):
+        if finished:
             self.ctx = output
             print(f'\n{output}')
 

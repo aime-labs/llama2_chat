@@ -55,6 +55,7 @@ class Llama:
         tokenizer_path: str,
         max_seq_len: int,
         max_batch_size: int,
+        gpu_id: int = 0,
         model_parallel_size: Optional[int] = None,
     ) -> "Llama":
         """
@@ -88,10 +89,10 @@ class Llama:
             initialize_model_parallel(model_parallel_size)
 
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        torch.cuda.set_device(local_rank)
+        torch.cuda.set_device(local_rank + gpu_id)
 
         # seed must be the same in all processes
-        torch.manual_seed(1)
+        #torch.manual_seed(1)
 
         if local_rank > 0:
             sys.stdout = open(os.devnull, "w")
@@ -198,7 +199,7 @@ class Llama:
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_token = sample_top_p(probs, top_p)
+                next_token = sample_top_k(probs, top_p, top_k)
             else:
                 next_token = torch.argmax(logits[:, -1], dim=-1)
 
@@ -441,27 +442,18 @@ class Llama:
         ]
 
 
-def sample_top_p(probs, p):
-    """
-    Perform top-p (nucleus) sampling on a probability distribution.
+def sample_top_k(probs, top_p=0.0, top_k=40):
+    if top_k > 0:
+        probs_sort, probs_idx = torch.topk(probs, top_k)
+    else:
+        probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
+    if top_p > 0.0:
+        probs_sum = torch.cumsum(probs_sort, dim=-1)
+        mask = probs_sum - probs_sort > top_p
+        probs_sort[mask] = 0.0
+        probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
 
-    Args:
-        probs (torch.Tensor): Probability distribution tensor.
-        p (float): Probability threshold for top-p sampling.
-
-    Returns:
-        torch.Tensor: Sampled token indices.
-
-    Note:
-        Top-p sampling selects the smallest set of tokens whose cumulative probability mass
-        exceeds the threshold p. The distribution is renormalized based on the selected tokens.
-
-    """
-    probs_sort, probs_idx = torch.sort(probs, dim=-1, descending=True)
-    probs_sum = torch.cumsum(probs_sort, dim=-1)
-    mask = probs_sum - probs_sort > p
-    probs_sort[mask] = 0.0
-    probs_sort.div_(probs_sort.sum(dim=-1, keepdim=True))
     next_token = torch.multinomial(probs_sort, num_samples=1)
     next_token = torch.gather(probs_idx, -1, next_token)
+
     return next_token
