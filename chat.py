@@ -51,9 +51,9 @@ def main():
             prompts = []
             
             job_data = api_worker.job_request()
-            set_seed(job_data.get('seed'))
-            print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
+            
             if local_rank == 0:
+                print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
                 callback.job_data = job_data
                 ctx = job_data['text']
                 prompts.append(ctx)
@@ -66,6 +66,9 @@ def main():
             top_p = get_parameter('top_p', float, 0.9, args, job_data, local_rank)
             top_k = get_parameter('top_k', int, 40, args, job_data, local_rank)
             temperature = get_parameter('temperature', float, 0.8, args, job_data, local_rank)
+            seed = get_parameter('seed', int, 1234, args, job_data, local_rank)
+
+            set_seed(seed)
 
             results = generator.generate(
                 callback.process_output, prompts, max_gen_len=512, temperature=temperature, top_p=top_p, top_k=top_k, repetition_penalty=args.repetition_penalty
@@ -102,7 +105,6 @@ Dave: How can I assist you today?
 
 
 def set_seed(seed):
-
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -138,6 +140,12 @@ def load_flags():
         "--max_batch_size", type=int, default=1, required=False,
         help="Maximum batch size",
     )    
+
+    parser.add_argument(
+        "--seed", type=int, default=1234, required=False,
+        help="Initial Seed",
+    )    
+
     parser.add_argument(
         "--repetition_penalty", type=float, default=(1.0/0.85), required=False,
         help="Repetition penalty",
