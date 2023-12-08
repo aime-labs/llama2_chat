@@ -89,14 +89,17 @@ def main():
         callback = ProcessOutputToShellCallback(local_rank, ctx)
         print(f'\n{ctx}', end='', flush=True)
         while True:
-            
-            prompt = input(f'User: ')
-            if ctx != "":
-                ctx = ctx + "User: " + prompt + "\n"
+            if local_rank == 0:
+                prompt = input(f'User: ')
+                if ctx != "":
+                    ctx = ctx + "User: " + prompt + "\n"
+                else:
+                    ctx = prompt + "\n"
+                
+                prompts = [ctx]
             else:
-                ctx = prompt + "\n"
-            
-            prompts = [ctx]
+                prompts = ['']
+            torch.distributed.broadcast_object_list(prompts, src=0)
             if not args.temperature:
                 args.temperature = 0.8
             if not args.top_p:
@@ -106,6 +109,7 @@ def main():
             results = generator.generate(
                 callback.process_output, prompts, max_gen_len=512, temperature=args.temperature, top_p=args.top_p, top_k=args.top_k, repetition_penalty=args.repetition_penalty
             )
+
             ctx = callback.ctx
             
 
@@ -206,16 +210,17 @@ class ProcessOutputToShellCallback():
         self.previous_token = None
 
     def process_output(self, output, num_generated_tokens, finished):
+
         token = output.split(self.previous_token)[-1]
-        if self.local_rank == 0:
-            print(token, end='', flush=True)
+        print(token, end='', flush=True)
         
         if finished:
-            self.ctx = output            
+            self.ctx = output
             self.previous_token = None
             
         else:
-            self.previous_token = token
+            if token:
+                self.previous_token = token
 
 
 

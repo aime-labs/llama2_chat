@@ -89,6 +89,7 @@ class Llama:
             initialize_model_parallel(model_parallel_size)
 
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
+
         torch.cuda.set_device(local_rank + gpu_id)
 
         # seed must be the same in all processes
@@ -102,7 +103,7 @@ class Llama:
         if model_parallel_size != len(checkpoints):
             checkpoints = sorted(Path(ckpt_dir).glob(f'consolidated.*.pth'))
         print('checkpoints', checkpoints)
-        #checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
+
         assert len(checkpoints) > 0, f"no checkpoint files found in {ckpt_dir}"
         assert model_parallel_size == len(
             checkpoints
@@ -162,7 +163,6 @@ class Llama:
             If logprobs is True, token log probabilities are computed for each generated token.
 
         """
-
         prompt_tokens = [self.tokenizer.encode(x, bos=True, eos=False) for x in prompts]
         params = self.model.params
         bsz = len(prompt_tokens)
@@ -191,18 +191,19 @@ class Llama:
                 reduction="none",
                 ignore_index=pad_id,
             )
+        
         word = []
         generated_text = ""
         num_generated_tokens = 0
         for cur_pos in range(min_prompt_len, total_len):
             num_generated_tokens += 1
+
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
                 next_token = sample_top_k(probs, top_p, top_k)
             else:
                 next_token = torch.argmax(logits[:, -1], dim=-1)
-
             next_token = next_token.reshape(-1)
             # only replace token if prompt has already been generated
             next_token = torch.where(
@@ -210,6 +211,7 @@ class Llama:
             )
             if next_token != self.tokenizer.eos_id:
                 word.append(next_token.item())
+
             word_str = self.tokenizer.decode(word)
             if " " in word_str:
                 text = word_str[:word_str.find(" ") + 1]
@@ -217,13 +219,13 @@ class Llama:
                 process_output_callback(generated_text, num_generated_tokens, False)
                 word = word[-1:]
 
-
             tokens[:, cur_pos] = next_token
+            
             mask = tokens != -1
 
             # replace -1 values with 2
             tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
-
+            
             if logprobs:
                 token_logprobs[:, prev_pos + 1 : cur_pos + 1] = -F.cross_entropy(
                     input=logits.transpose(1, 2),
@@ -232,19 +234,16 @@ class Llama:
                     ignore_index=pad_id,
                 )
 
-
             prev_pos = cur_pos
-            if '\nUser:' in word_str:
 
+            
+            if '\nUser:' in word_str:
                 break
             eos_reached |= (~input_text_mask[:, cur_pos]) & (
                 next_token == self.tokenizer.eos_id
             )
             if all(eos_reached):
                 break
-
-
-            #print('ä', word_str)
 
         if logprobs:
             token_logprobs = token_logprobs.tolist()
@@ -266,16 +265,15 @@ class Llama:
                 toks = toks[:pad_idx]
                 probs = probs[:pad_idx] if logprobs else None
             
-
             final_result = self.tokenizer.decode(toks).strip('User:')
 
             process_output_callback(final_result, num_generated_tokens, True)
             out_tokens.append(toks)
-            output = ''
             
             out_logprobs.append(probs)
         
         return (out_tokens, out_logprobs if logprobs else None)
+
 
     def text_completion(
         self,
