@@ -38,7 +38,7 @@ def main():
     world_size = int(os.environ.get("WORLD_SIZE", 1))
     if args.api_server:
 
-        from api_worker_interface import APIWorkerInterface
+        from aime_api_worker_interface import APIWorkerInterface
         api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, WORKER_AUTH_KEY, args.gpu_id, world_size=world_size, rank=local_rank)
         callback = ProcessOutputCallback(local_rank, api_worker)
 
