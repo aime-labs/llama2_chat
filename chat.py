@@ -199,7 +199,6 @@ class ProcessOutputCallback():
                 self.job_data['num_generated_tokens'] = num_generated_tokens
                 return self.api_worker.send_job_results(results, self.job_data)
             elif self.api_worker.progress_data_received:
-                results['test_progress'] = 'bla'
                 return self.api_worker.send_progress(num_generated_tokens, results)
 
 

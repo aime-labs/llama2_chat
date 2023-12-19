@@ -7,7 +7,7 @@ from pathlib import Path
 """
 Sample usage:
     ```
-    python convert_weights.py --input_dir /models/llama/ --model_size 13B
+    python convert_weights.py --input_dir /models/llama/ --model_size 13B --num_gpus 1
     ```
 """
 
