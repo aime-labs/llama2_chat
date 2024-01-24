@@ -14,6 +14,7 @@ import numpy as np
 
 WORKER_JOB_TYPE = "llama2"
 WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
+VERSION = 0
 
 def main():
     """
@@ -39,7 +40,7 @@ def main():
     if args.api_server:
 
         from aime_api_worker_interface import APIWorkerInterface
-        api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, WORKER_AUTH_KEY, args.gpu_id, world_size=world_size, rank=local_rank)
+        api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, WORKER_AUTH_KEY, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
         callback = ProcessOutputCallback(local_rank, api_worker)
 
 
