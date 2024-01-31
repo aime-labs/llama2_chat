@@ -41,7 +41,7 @@ def main():
 
         from aime_api_worker_interface import APIWorkerInterface
         api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, WORKER_AUTH_KEY, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
-        callback = ProcessOutputCallback(local_rank, api_worker)
+        callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name)
 
 
     generator = Llama.build(
@@ -187,15 +187,16 @@ def get_parameter(parameter_name, parameter_type, default_value, args, job_data,
 
 
 class ProcessOutputCallback():
-    def __init__(self, local_rank, api_worker):
+    def __init__(self, local_rank, api_worker, model_name):
         self.local_rank = local_rank
         self.api_worker = api_worker
+        self.model_name = model_name
         self.job_data = None
 
 
     def process_output(self, output, num_generated_tokens, finished):
         if self.local_rank == 0:
-            results = {'text': output}
+            results = {'text': output, 'model_name': self.model_name}
             if finished:
                 self.job_data['num_generated_tokens'] = num_generated_tokens
                 return self.api_worker.send_job_results(results, self.job_data)
