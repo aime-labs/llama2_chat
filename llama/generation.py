@@ -167,17 +167,18 @@ class Llama:
         params = self.model.params
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
+        prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len else t[len(t) - params.max_seq_len - max_gen_len:] for t in prompt_tokens]
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
-        assert max_prompt_len <= params.max_seq_len
-        total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
-
         pad_id = self.tokenizer.pad_id
-        
+        assert max_prompt_len + max_gen_len <= params.max_seq_len
+        total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
         tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device="cuda")
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
+
+
         if logprobs:
             token_logprobs = torch.zeros_like(tokens, dtype=torch.float)
         prev_pos = 0
