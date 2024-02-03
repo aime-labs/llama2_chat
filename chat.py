@@ -76,7 +76,7 @@ def main():
 
             set_seed(seed)
 
-            results = generator.generate(
+            results = generator.generate_realtime(
                 callback.process_output, prompts, max_gen_len=512, temperature=temperature, top_p=top_p, top_k=top_k, repetition_penalty=args.repetition_penalty
             )
             print('Done')
@@ -107,7 +107,7 @@ def main():
                 args.top_p = 0.9
             if not args.top_k:
                 args.top_k = 40
-            results = generator.generate(
+            results = generator.generate_realtime(
                 callback.process_output, prompts, max_gen_len=512, temperature=args.temperature, top_p=args.top_p, top_k=args.top_k, repetition_penalty=args.repetition_penalty
             )
 
