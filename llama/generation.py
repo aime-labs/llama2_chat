@@ -141,8 +141,6 @@ class Llama:
         top_p: float = 0.9,
         top_k: int = 40,
         repetition_penalty: float = (1.0 / 0.85),
-        logprobs: bool = False,
-        echo: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
         """
         Generate text sequences based on provided prompts using the language generation model.
@@ -152,8 +150,6 @@ class Llama:
             max_gen_len (int): Maximum length of the generated text sequence.
             temperature (float, optional): Temperature value for controlling randomness in sampling. Defaults to 0.6.
             top_p (float, optional): Top-p probability threshold for nucleus sampling. Defaults to 0.9.
-            logprobs (bool, optional): Flag indicating whether to compute token log probabilities. Defaults to False.
-            echo (bool, optional): Flag indicating whether to include prompt tokens in the generated output. Defaults to False.
 
         Returns:
             Tuple[List[List[int]], Optional[List[List[float]]]]: A tuple containing generated token sequences and, if logprobs is True, corresponding token log probabilities.
@@ -178,20 +174,12 @@ class Llama:
         for k, t in enumerate(prompt_tokens):
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
 
-        if logprobs:
-            token_logprobs = torch.zeros_like(tokens, dtype=torch.float)
         prev_pos = 0
         eos_reached = torch.tensor([False] * bsz, device="cuda")
         input_text_mask = tokens != pad_id
         if min_prompt_len == total_len:
             logits = self.model.forward(tokens, prev_pos)
-            token_logprobs = -F.cross_entropy(
-                input=logits.transpose(1, 2),
-                target=tokens,
-                reduction="none",
-                ignore_index=pad_id,
-            )
-        
+                    
         word = []
         generated_text = ""
         num_generated_tokens = 0
@@ -226,14 +214,6 @@ class Llama:
             # replace -1 values with 2
             tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
             
-            if logprobs:
-                token_logprobs[:, prev_pos + 1 : cur_pos + 1] = -F.cross_entropy(
-                    input=logits.transpose(1, 2),
-                    target=tokens[:, prev_pos + 1 : cur_pos + 1],
-                    reduction="none",
-                    ignore_index=pad_id,
-                )
-
             prev_pos = cur_pos
 
             if '\nUser:' in word_str:
@@ -244,34 +224,22 @@ class Llama:
             if all(eos_reached):
                 break
 
-        if logprobs:
-            token_logprobs = token_logprobs.tolist()
-        out_tokens, out_logprobs = [], []
-        for i, toks in enumerate(tokens.tolist()):
-
-            start = 0 if echo else len(prompt_tokens[i])
-            #toks = toks[start : len(prompt_tokens[i]) + max_gen_len]
-            probs = None
-            if logprobs:
-                probs = token_logprobs[i][start : len(prompt_tokens[i]) + max_gen_len]
+        out_tokens = []
+        for toks in tokens.tolist():
             # cut to eos tok if any
             if self.tokenizer.eos_id in toks:
                 eos_idx = toks.index(self.tokenizer.eos_id)
                 toks = toks[:eos_idx]
-                probs = probs[:eos_idx] if logprobs else None
             if self.tokenizer.pad_id in toks:
                 pad_idx = toks.index(self.tokenizer.pad_id)
                 toks = toks[:pad_idx]
-                probs = probs[:pad_idx] if logprobs else None
             
             final_result = self.tokenizer.decode(toks).strip('User:')
 
             process_output_callback(final_result, num_generated_tokens, True)
             out_tokens.append(toks)
-            
-            out_logprobs.append(probs)
-        
-        return (out_tokens, out_logprobs if logprobs else None)
+                    
+        return (out_tokens)
 
 
     @torch.inference_mode()
