@@ -352,6 +352,7 @@ class Llama:
         prompts: List[str],
         temperature: float = 0.6,
         top_p: float = 0.9,
+        top_k: int = 40,
         max_gen_len: Optional[int] = None,
         logprobs: bool = False,
         echo: bool = False,
@@ -384,6 +385,7 @@ class Llama:
             max_gen_len=max_gen_len,
             temperature=temperature,
             top_p=top_p,
+            top_k=top_k,
             logprobs=logprobs,
             echo=echo,
         )
