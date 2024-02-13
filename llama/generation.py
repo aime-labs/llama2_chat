@@ -249,6 +249,7 @@ class Llama:
         max_gen_len: int,
         temperature: float = 0.6,
         top_p: float = 0.9,
+        top_k: int = 40,
         logprobs: bool = False,
         echo: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
@@ -303,7 +304,7 @@ class Llama:
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_token = sample_top_k(probs, top_p)
+                next_token = sample_top_k(probs, top_p, top_k)
             else:
                 next_token = torch.argmax(logits[:, -1], dim=-1)
 
