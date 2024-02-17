@@ -23,13 +23,13 @@ Run the chat mode in the command line with following command:
 torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
 ```
 
-## Updates post-launch
-
-See [UPDATES.md](UPDATES.md). Also for a running list of frequently asked questions, see [here](https://github.com/facebookresearch/llama/blob/main/FAQ.md).
+## Start Chat in AIME API Worker Mode
+Run the chat mode in the command line with following command:
+```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
+```
 
 ## Download
-
-⚠️ **7/18: We're aware of people encountering a number of download issues today. Anyone still encountering issues should remove all local files, re-clone the repository, and [request a new download link](https://ai.meta.com/resources/models-and-libraries/llama-downloads/). It's critical to do all of these in case you have local corrupt files.**
 
 In order to download the model weights and tokenizer, please visit the [Meta AI website](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) and accept our License.
 

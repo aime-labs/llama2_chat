@@ -60,7 +60,6 @@ def main():
             
             if local_rank == 0:
                 print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
-                callback.job_data = job_data
                 ctx = job_data['text']
                 prompts.append(ctx)
             else:
@@ -112,7 +111,6 @@ def main():
             )
 
             ctx = callback.ctx
-            
 
 
 def set_seed(seed):
@@ -191,15 +189,12 @@ class ProcessOutputCallback():
         self.local_rank = local_rank
         self.api_worker = api_worker
         self.model_name = model_name
-        self.job_data = None
-
 
     def process_output(self, output, num_generated_tokens, finished):
         if self.local_rank == 0:
-            results = {'text': output, 'model_name': self.model_name}
+            results = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
             if finished:
-                self.job_data['num_generated_tokens'] = num_generated_tokens
-                return self.api_worker.send_job_results(results, self.job_data)
+                return self.api_worker.send_job_results(results)
             elif self.api_worker.progress_data_received:
                 return self.api_worker.send_progress(num_generated_tokens, results)
 
