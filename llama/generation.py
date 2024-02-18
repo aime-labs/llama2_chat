@@ -224,22 +224,11 @@ class Llama:
             if all(eos_reached):
                 break
 
-        out_tokens = []
-        for toks in tokens.tolist():
-            # cut to eos tok if any
-            if self.tokenizer.eos_id in toks:
-                eos_idx = toks.index(self.tokenizer.eos_id)
-                toks = toks[:eos_idx]
-            if self.tokenizer.pad_id in toks:
-                pad_idx = toks.index(self.tokenizer.pad_id)
-                toks = toks[:pad_idx]
-            
-            final_result = self.tokenizer.decode(toks).strip('User:')
+        generated_text = (generated_text + word_str).strip('\nUser:') + "\n"
 
-            process_output_callback(final_result, num_generated_tokens, True)
-            out_tokens.append(toks)
+        process_output_callback(generated_text, num_generated_tokens, True)
                     
-        return (out_tokens)
+        return generated_text
 
 
     @torch.inference_mode()

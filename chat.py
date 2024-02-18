@@ -206,14 +206,16 @@ class ProcessOutputToShellCallback():
         self.previous_token = None
 
     def process_output(self, output, num_generated_tokens, finished):
+        if self.previous_token:
+            token = output.split(self.previous_token)[-1]
+        else:
+            token = output
 
-        token = output.split(self.previous_token)[-1]
         print(token, end='', flush=True)
         
         if finished:
             self.ctx = output
-            self.previous_token = None
-            
+            self.previous_token = None  
         else:
             if token:
                 self.previous_token = token
