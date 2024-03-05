@@ -52,22 +52,23 @@ def main():
     )
 
     if args.api_server:
-        ctx = ""
         while True:
             prompts = []
             
-            job_data = api_worker.job_request()
-            
+            job_batch_data = api_worker.job_batch_request(args.max_batch_size)
             if local_rank == 0:
-                print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
-                ctx = job_data['text']
-                prompts.append(ctx)
+                for job_data in job_batch_data:
+                    print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
+                    ctx = job_data['text']
+                    prompts.append(ctx)
             else:
                 prompts.append("")
 
         #        torch.distributed.barrier()    # not useable! Does active CPU waiting and times out with an error after about 30 minutes!
 
             torch.distributed.broadcast_object_list(prompts, 0)
+
+            job_data = job_batch_data[0]    # TODO: each job has its own set of top_p, top_k, temperature
             top_p = get_parameter('top_p', float, 0.9, args, job_data, local_rank)
             top_k = get_parameter('top_k', int, 40, args, job_data, local_rank)
             temperature = get_parameter('temperature', float, 0.8, args, job_data, local_rank)
@@ -79,7 +80,6 @@ def main():
                 callback.process_output, prompts, max_gen_len=512, temperature=temperature, top_p=top_p, top_k=top_k, repetition_penalty=args.repetition_penalty
             )
             print('Done')
-            ctx = results[0]
     else:
         
         ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
@@ -190,13 +190,15 @@ class ProcessOutputCallback():
         self.api_worker = api_worker
         self.model_name = model_name
 
-    def process_output(self, output, num_generated_tokens, finished):
+    def process_output(self, batch_idx, output, num_generated_tokens, finished):
         if self.local_rank == 0:
+            job_batch_data = self.api_worker.current_job_batch_data()
+            job_data = job_batch_data[batch_idx]
             results = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
             if finished:
-                return self.api_worker.send_job_results(results)
-            elif self.api_worker.progress_data_received:
-                return self.api_worker.send_progress(num_generated_tokens, results)
+                return self.api_worker.send_job_results(results, job_data=job_data)
+            else:
+                return self.api_worker.send_progress(num_generated_tokens, results, job_data=job_data)
 
 
 class ProcessOutputToShellCallback():
@@ -205,7 +207,7 @@ class ProcessOutputToShellCallback():
         self.ctx = ctx
         self.previous_token = None
 
-    def process_output(self, output, num_generated_tokens, finished):
+    def process_output(self, batch_idx, output, num_generated_tokens, finished):
         if self.previous_token:
             token = output.split(self.previous_token)[-1]
         else:

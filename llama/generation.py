@@ -164,6 +164,9 @@ class Llama:
         bsz = len(prompt_tokens)
         assert bsz <= params.max_batch_size, (bsz, params.max_batch_size)
         prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len else t[len(t) - params.max_seq_len - max_gen_len:] for t in prompt_tokens]
+        prompt_tokens_length = [len(t) for t in prompt_tokens]
+
+        print(str(prompt_tokens_length))
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
@@ -175,60 +178,73 @@ class Llama:
             tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device="cuda")
 
         prev_pos = 0
-        eos_reached = torch.tensor([False] * bsz, device="cuda")
+        stream_ended = [False] * bsz
         input_text_mask = tokens != pad_id
         if min_prompt_len == total_len:
             logits = self.model.forward(tokens, prev_pos)
-                    
-        word = []
-        generated_text = ""
+
+        #words = [[]] * bsz  # !!! does not work, as it creates an array of references to the same inner array!
+        words = []
+        for i in range(0, bsz):
+            words.append([])
+        generated_texts = [''] * bsz
         num_generated_tokens = 0
+
         for cur_pos in range(min_prompt_len, total_len):
             num_generated_tokens += 1
 
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_token = sample_top_k(probs, top_p, top_k)
+                next_tokens = sample_top_k(probs, top_p, top_k)
             else:
-                next_token = torch.argmax(logits[:, -1], dim=-1)
-            next_token = next_token.reshape(-1)
-            # only replace token if prompt has already been generated
-            next_token = torch.where(
-                input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
-            )
-            if next_token != self.tokenizer.eos_id:
-                word.append(next_token.item())
-
-            word_str = self.tokenizer.decode(word)
-            if " " in word_str:
-                text = word_str[:word_str.find(" ") + 1]
-                generated_text += text
-                process_output_callback(generated_text, num_generated_tokens, False)
-                word = word[-1:]
-
-            tokens[:, cur_pos] = next_token
+                next_tokens = torch.argmax(logits[:, -1], dim=-1)
             
-            mask = tokens != -1
+            next_tokens = next_tokens.reshape(-1)
+
+            # only replace token if prompt has already been generated
+            next_tokens = torch.where(
+                input_text_mask[:, cur_pos], tokens[:, cur_pos], next_tokens
+            )
+
+            for idx, next_token in enumerate(next_tokens):
+                if not stream_ended[idx] and (cur_pos >= prompt_tokens_length[idx]):
+                    if next_token != self.tokenizer.eos_id:
+                        words[idx].append(next_token.item())
+                    else:
+                        stream_ended[idx] = True
+
+                    word_str = self.tokenizer.decode(words[idx])
+                    if " " in word_str:
+                        text = word_str[:word_str.find(" ") + 1]
+                        generated_texts[idx] += text
+                        if (num_generated_tokens % bsz) == idx:
+                            process_output_callback(idx, generated_texts[idx], num_generated_tokens, False)
+                        words[idx] = words[idx][-1:]
+
+                    if (cur_pos + 1) == total_len:
+                        stream_ended[idx] = True
+                    
+                    if '\nUser:' in word_str:
+                        stream_ended[idx] = True
+
+                    if stream_ended[idx]:
+                        generated_texts[idx] = (generated_texts[idx] + word_str).strip('\nUser:') + "\n"
+                        process_output_callback(idx, generated_texts[idx], num_generated_tokens, True)
+
+            tokens[:, cur_pos] = next_tokens
 
             # replace -1 values with 2
+            mask = tokens != -1
             tokens = torch.where(mask, tokens, torch.ones_like(tokens)*self.tokenizer.eos_id)
-            
+
             prev_pos = cur_pos
 
-            if '\nUser:' in word_str:
-                break
-            eos_reached |= (~input_text_mask[:, cur_pos]) & (
-                next_token == self.tokenizer.eos_id
-            )
-            if all(eos_reached):
+            if all(stream_ended):
                 break
 
-        generated_text = (generated_text + word_str).strip('\nUser:') + "\n"
-
-        process_output_callback(generated_text, num_generated_tokens, True)
-                    
-        return generated_text
+        return generated_texts
 
 
     @torch.inference_mode()
