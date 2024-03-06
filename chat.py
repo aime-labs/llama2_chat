@@ -62,7 +62,8 @@ def main():
                     ctx = job_data['text']
                     prompts.append(ctx)
             else:
-                prompts.append("")
+                for job_data in job_batch_data:
+                    prompts.append("")
 
         #        torch.distributed.barrier()    # not useable! Does active CPU waiting and times out with an error after about 30 minutes!
 
@@ -91,8 +92,9 @@ def main():
         while True:
             if local_rank == 0:
                 prompt = input(f'User: ')
-                if ctx != "":
-                    ctx = ctx + "User: " + prompt + "\n"
+                if ctx != "":                    
+                    print("Dave: ", end='', flush=True)
+                    ctx = ctx + "User: " + prompt + "\n" + "Dave: "
                 else:
                     ctx = prompt + "\n"
                 
