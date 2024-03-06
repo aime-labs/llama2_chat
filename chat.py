@@ -56,16 +56,20 @@ def main():
             prompts = []
             
             job_batch_data = api_worker.job_batch_request(args.max_batch_size)
+
+            batch_size = [len(job_batch_data)]
+            torch.distributed.broadcast_object_list(batch_size, 0)
+            batch_size = batch_size[0]
+
             if local_rank == 0:
+                print(f'processing job ', end='', flush=True)
                 for job_data in job_batch_data:
-                    print(f'processing job {job_data.get("job_id")}....', end='', flush=True)
+                    print(f'{job_data.get("job_id")} ... ', end='', flush=True)
                     ctx = job_data['text']
                     prompts.append(ctx)
             else:
-                for job_data in job_batch_data:
-                    prompts.append("")
-
-        #        torch.distributed.barrier()    # not useable! Does active CPU waiting and times out with an error after about 30 minutes!
+                for i in range(0, batch_size):
+                    prompts.append("")  # prompts array has to be same size for multi rank broadcast
 
             torch.distributed.broadcast_object_list(prompts, 0)
 
@@ -144,7 +148,7 @@ def load_flags():
         help="Top_k, 0=<top_k<=1",
     )
     parser.add_argument(
-        "--max_seq_len", type=int, default=2048, required=False,
+        "--max_seq_len", type=int, default=4096, required=False,
         help="Maximum sequence length",
     )
     parser.add_argument(
