@@ -166,8 +166,6 @@ class Llama:
         prompt_tokens = [t if len(t) <= params.max_seq_len - max_gen_len else t[len(t) - params.max_seq_len - max_gen_len:] for t in prompt_tokens]
         prompt_tokens_length = [len(t) for t in prompt_tokens]
 
-        print(str(prompt_tokens_length))
-
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
         pad_id = self.tokenizer.pad_id
