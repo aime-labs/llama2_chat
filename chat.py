@@ -51,6 +51,8 @@ def main():
         max_batch_size=args.max_batch_size,
     )
 
+    set_seed(args.seed)
+
     if args.api_server:
         while True:
             prompts = []
@@ -67,23 +69,25 @@ def main():
                     print(f'{job_data.get("job_id")} ... ', end='', flush=True)
                     ctx = job_data['text']
                     prompts.append(ctx)
+                top_ps = api_worker.get_job_batch_parameter('top_p')
+                top_ks = api_worker.get_job_batch_parameter('top_k')
+                temperatures = api_worker.get_job_batch_parameter('temperature')
             else:
-                for i in range(0, batch_size):
-                    prompts.append("")  # prompts array has to be same size for multi rank broadcast
+                prompts = [''] * batch_size # array has to be same size for multi rank broadcast
+                top_ps = [args.top_p] * batch_size # array has to be same size for multi rank broadcast
+                top_ks = [args.top_k] * batch_size # array has to be same size for multi rank broadcast
+                temperatures = [args.temperature] * batch_size # array has to be same size for multi rank broadcast
 
+            # synchronize across ranks
             torch.distributed.broadcast_object_list(prompts, 0)
-
-            job_data = job_batch_data[0]    # TODO: each job has its own set of top_p, top_k, temperature
-            top_p = get_parameter('top_p', float, 0.9, args, job_data, local_rank)
-            top_k = get_parameter('top_k', int, 40, args, job_data, local_rank)
-            temperature = get_parameter('temperature', float, 0.8, args, job_data, local_rank)
-            seed = get_parameter('seed', int, 1234, args, job_data, local_rank)
-
-            set_seed(seed)
+            torch.distributed.broadcast_object_list(top_ps, 0)
+            torch.distributed.broadcast_object_list(top_ks, 0)
+            torch.distributed.broadcast_object_list(temperatures, 0)
 
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=512, temperature=temperature, top_p=top_p, top_k=top_k, repetition_penalty=args.repetition_penalty
+                callback.process_output, prompts, max_gen_len=1024, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks, repetition_penalty=args.repetition_penalty
             )
+
             print('Done')
     else:
         
@@ -113,7 +117,7 @@ def main():
             if not args.top_k:
                 args.top_k = 40
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=512, temperature=args.temperature, top_p=args.top_p, top_k=args.top_k, repetition_penalty=args.repetition_penalty
+                callback.process_output, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
             )
 
             ctx = callback.ctx
