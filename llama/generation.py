@@ -137,9 +137,9 @@ class Llama:
         process_output_callback,
         prompts: List[str],
         max_gen_len: int,
-        temperature: float = 0.6,
-        top_p: float = 0.9,
-        top_k: int = 40,
+        temperatures: [float] =[0.6],
+        top_ps: [float] = [0.9],
+        top_ks: [int] = [40],
         repetition_penalty: float = (1.0 / 0.85),
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
         """
@@ -193,13 +193,19 @@ class Llama:
 
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             
-            if temperature > 0:
-                probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_tokens = sample_top_k(probs, top_p, top_k)
-            else:
-                next_tokens = torch.argmax(logits[:, -1], dim=-1)
-            
-            next_tokens = next_tokens.reshape(-1)
+            next_tokens = None
+            for idx in range(0, bsz):
+                if temperatures[idx] > 0:
+                    probs = torch.softmax(logits[idx,-1] / temperatures[idx], dim=-1)
+                    next_token = sample_top_k(probs, top_ps[idx], top_ks[idx])
+#                    print("logits: " + str(logits.shape) + "  probs: " + str(probs.shape) + "next_tokens: " + str(next_token.shape))
+                else:
+                    next_token = torch.argmax(logits[idx,-1])
+
+                if next_tokens == None:
+                    next_tokens = next_token
+                else:
+                    next_tokens = torch.cat((next_tokens, next_token), 0)
 
             # only replace token if prompt has already been generated
             next_tokens = torch.where(
