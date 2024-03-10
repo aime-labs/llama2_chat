@@ -8,6 +8,7 @@ from llama import Llama, Dialog
 import argparse
 from pathlib import Path
 import os
+import time
 import torch
 import random
 import numpy as np
@@ -85,7 +86,7 @@ def main():
             torch.distributed.broadcast_object_list(temperatures, 0)
 
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=1024, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks, repetition_penalty=args.repetition_penalty
+                callback, prompts, max_gen_len=1024, temperatures=temperatures, top_ps=top_ps, top_ks=top_ks, repetition_penalty=args.repetition_penalty
             )
 
             print('Done')
@@ -195,20 +196,39 @@ def get_parameter(parameter_name, parameter_type, default_value, args, job_data,
 
 
 class ProcessOutputCallback():
+    
+    PROGRESS_UPDATES_PER_SEC = 5
+
     def __init__(self, local_rank, api_worker, model_name):
         self.local_rank = local_rank
         self.api_worker = api_worker
         self.model_name = model_name
+        self.progress_update_data = {}
+        self.last_progress_update = time.time()
 
     def process_output(self, batch_idx, output, num_generated_tokens, finished):
         if self.local_rank == 0:
             job_batch_data = self.api_worker.current_job_batch_data()
             job_data = job_batch_data[batch_idx]
-            results = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
+            result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
             if finished:
-                return self.api_worker.send_job_results(results, job_data=job_data)
+                self.progress_update_data.pop(batch_idx, None) 
+                return self.api_worker.send_job_results(result, job_data=job_data)
             else:
-                return self.api_worker.send_progress(num_generated_tokens, results, job_data=job_data)
+                self.progress_update_data[batch_idx] = result
+                now = time.time()
+                if((now - self.last_progress_update) > (1.0 / ProcessOutputCallback.PROGRESS_UPDATES_PER_SEC)):
+                    self.last_progress_update = now
+                    progress_values = []
+                    results = []
+                    progress_job_data = []
+                    for idx in self.progress_update_data.keys():
+                        result = self.progress_update_data[idx]
+                        results.append(result)
+                        progress_values.append(result.get('num_generated_tokens', 0))
+                        progress_job_data.append(job_batch_data[idx])
+                    self.progress_update_data = {}
+                    return self.api_worker.send_batch_progress(progress_values, results, progress_job_data)
 
 
 class ProcessOutputToShellCallback():

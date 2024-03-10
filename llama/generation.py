@@ -134,7 +134,7 @@ class Llama:
     @torch.inference_mode()
     def generate_realtime(
         self,
-        process_output_callback,
+        output_callback,
         prompts: List[str],
         max_gen_len: int,
         temperatures: [float] =[0.6],
@@ -198,7 +198,6 @@ class Llama:
                 if temperatures[idx] > 0:
                     probs = torch.softmax(logits[idx,-1] / temperatures[idx], dim=-1)
                     next_token = sample_top_k(probs, top_ps[idx], top_ks[idx])
-#                    print("logits: " + str(logits.shape) + "  probs: " + str(probs.shape) + "next_tokens: " + str(next_token.shape))
                 else:
                     next_token = torch.argmax(logits[idx,-1])
 
@@ -223,8 +222,7 @@ class Llama:
                     if " " in word_str:
                         text = word_str[:word_str.find(" ") + 1]
                         generated_texts[idx] += text
-                        if (num_generated_tokens % bsz) == idx:
-                            process_output_callback(idx, generated_texts[idx], num_generated_tokens, False)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens, False)
                         words[idx] = words[idx][-1:]
 
                     if (cur_pos + 1) == total_len:
@@ -235,7 +233,7 @@ class Llama:
 
                     if stream_ended[idx]:
                         generated_texts[idx] = (generated_texts[idx] + word_str).strip('\nUser:') + "\n"
-                        process_output_callback(idx, generated_texts[idx], num_generated_tokens, True)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens, True)
 
             tokens[:, cur_pos] = next_tokens
 
