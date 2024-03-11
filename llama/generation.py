@@ -186,10 +186,9 @@ class Llama:
         for i in range(0, bsz):
             words.append([])
         generated_texts = [''] * bsz
-        num_generated_tokens = 0
+        num_generated_tokens = [0] * bsz
 
         for cur_pos in range(min_prompt_len, total_len):
-            num_generated_tokens += 1
 
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             
@@ -213,6 +212,8 @@ class Llama:
 
             for idx, next_token in enumerate(next_tokens):
                 if not stream_ended[idx] and (cur_pos >= prompt_tokens_length[idx]):
+                    num_generated_tokens[idx] += 1
+
                     if next_token != self.tokenizer.eos_id:
                         words[idx].append(next_token.item())
                     else:
@@ -222,7 +223,7 @@ class Llama:
                     if " " in word_str:
                         text = word_str[:word_str.find(" ") + 1]
                         generated_texts[idx] += text
-                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens, False)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], False)
                         words[idx] = words[idx][-1:]
 
                     if (cur_pos + 1) == total_len:
@@ -233,7 +234,7 @@ class Llama:
 
                     if stream_ended[idx]:
                         generated_texts[idx] = (generated_texts[idx] + word_str).strip('\nUser:') + "\n"
-                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens, True)
+                        output_callback.process_output(idx, generated_texts[idx], num_generated_tokens[idx], True)
 
             tokens[:, cur_pos] = next_tokens
 
