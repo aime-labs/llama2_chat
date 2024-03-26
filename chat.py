@@ -208,27 +208,27 @@ class ProcessOutputCallback():
 
     def process_output(self, batch_idx, output, num_generated_tokens, finished):
         if self.local_rank == 0:
-            job_batch_data = self.api_worker.current_job_batch_data()
+            job_batch_data = self.api_worker.get_current_job_batch_data()
             job_data = job_batch_data[batch_idx]
             result = {'text': output, 'model_name': self.model_name, 'num_generated_tokens': num_generated_tokens}
             if finished:
-                self.progress_update_data.pop(batch_idx, None) 
+                self.progress_update_data.pop(batch_idx, None)
                 return self.api_worker.send_job_results(result, job_data=job_data)
             else:
                 self.progress_update_data[batch_idx] = result
                 now = time.time()
-                if((now - self.last_progress_update) > (1.0 / ProcessOutputCallback.PROGRESS_UPDATES_PER_SEC)):
+                if (now - self.last_progress_update) > (1.0 / ProcessOutputCallback.PROGRESS_UPDATES_PER_SEC):
                     self.last_progress_update = now
                     progress_values = []
                     results = []
-                    progress_job_data = []
+                    progress_job_batch_data = []
                     for idx in self.progress_update_data.keys():
                         result = self.progress_update_data[idx]
                         results.append(result)
                         progress_values.append(result.get('num_generated_tokens', 0))
-                        progress_job_data.append(job_batch_data[idx])
+                        progress_job_batch_data.append(job_batch_data[idx])
                     self.progress_update_data = {}
-                    return self.api_worker.send_batch_progress(progress_values, results, progress_job_data)
+                    return self.api_worker.send_batch_progress(progress_values, results, job_batch_data=progress_job_batch_data)
 
 
 class ProcessOutputToShellCallback():
