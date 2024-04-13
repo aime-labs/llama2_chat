@@ -6,7 +6,10 @@ This release includes model weights and starting code for pretrained and fine-tu
 
 This repository is intended as a minimal example to load [Llama 2](https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/) models and run inference. For more detailed examples leveraging Hugging Face, see [llama-recipes](https://github.com/facebookresearch/llama-recipes/).
 
-## Setup with AIME MLC
+## Setup with [AIME MLC](https://github.com/aime-team/aime-ml-containers)
+
+Easy installation within an [AIME ML-Container](https://github.com/aime-team/aime-ml-containers).
+
 Create an AIME ML container:
 ```mlc-create mycontainer Pytorch 2.0.1```
 Once done open the container with:
