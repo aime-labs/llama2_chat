@@ -23,11 +23,14 @@ Run the chat mode in the command line with following command:
 torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
 ```
 
-## Start Chat in AIME API Worker Mode
-Run the chat mode in the command line with following command:
+## Start Llama2 Chat as AIME API Worker
+
+To run Llama2 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
+
 ```
 torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
 ```
+It will start Llama2 as worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
 
 ## Download
 
