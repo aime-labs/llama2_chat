@@ -14,7 +14,7 @@ The code is based on the original Llama codebase.
 
 The hardware requirements to run Mixtral 8x7B model in the default fp16 resolution:
 
-- 2x 80 GB GPUs (NVIDIA A100/H100)
+- 2x 80 GB GPUs (NVIDIA A100 / H100)
 - 4x 48 GB GPUs (NVIDIA RTX A6000 / 6000 Ada)
 - 8x 24 GB GPUs (NVIDIA RTX 3090 / A5000)
 

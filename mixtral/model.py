@@ -26,6 +26,7 @@ class ModelArgs:
 
     moe: Optional[Dict[str, int]] = None
     num_gpus: int = 1
+    rope_theta: float = 1e6
 
 ROPE_THETA = 1e6
 
@@ -76,7 +77,7 @@ class RMSNorm(torch.nn.Module):
         return output * self.weight
 
 
-def precompute_freqs_cis(dim: int, end: int, theta: float = ROPE_THETA):
+def precompute_freqs_cis(dim: int, end: int, theta: float):
     """
     Precompute the frequency tensor for complex exponentials (cis) with given dimensions.
 
@@ -467,7 +468,9 @@ class Transformer(nn.Module):
         self.freqs_cis = precompute_freqs_cis(
             # Note that self.params.max_seq_len is multiplied by 2 because the token limit for the Llama 2 generation of models is 4096.
             # Adding this multiplier instead of using 4096 directly allows for dynamism of token lengths while training or fine-tuning.
-            self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
+            self.params.dim // self.params.n_heads, 
+            self.params.max_seq_len * 2,
+            params.rope_theta
         )
 
     @torch.inference_mode()
