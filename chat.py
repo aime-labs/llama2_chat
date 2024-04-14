@@ -1,9 +1,9 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
-from typing import List, Optional
+from typing import Optional
 
-from llama import Llama, Dialog
+from mixtral import Mixtral
 
 import argparse
 from pathlib import Path
@@ -13,7 +13,7 @@ import torch
 import random
 import numpy as np
 
-WORKER_JOB_TYPE = "llama2"
+WORKER_JOB_TYPE = "mixtral"
 WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
 VERSION = 0
 
@@ -35,21 +35,22 @@ def main():
     """
     args = load_flags()
     if not args.tokenizer_path:
-        args.tokenizer_path = str(Path(args.ckpt_dir).parent / 'tokenizer.model')
+        args.tokenizer_path = str(Path(args.ckpt_dir) / 'tokenizer.model')
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
-    if args.api_server:
 
+    if args.api_server:
         from aime_api_worker_interface import APIWorkerInterface
         api_worker = APIWorkerInterface(args.api_server, WORKER_JOB_TYPE, WORKER_AUTH_KEY, args.gpu_id, world_size=world_size, rank=local_rank, gpu_name=torch.cuda.get_device_name(), worker_version=VERSION)
         callback = ProcessOutputCallback(local_rank, api_worker, Path(args.ckpt_dir).name)
 
 
-    generator = Llama.build(
+    generator = Mixtral.build(
         ckpt_dir=args.ckpt_dir,
         tokenizer_path=args.tokenizer_path,
         max_seq_len=args.max_seq_len,
         max_batch_size=args.max_batch_size,
+        num_gpus=args.num_gpus,
     )
 
     set_seed(args.seed)
@@ -92,9 +93,9 @@ def main():
             print('Done')
     else:
         
-        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
-              "User: Hello, Dave.\n" +\
-              "Dave: How can I assist you today?\n"
+        ctx = "A dialog, where 'User' interacts with an helpful, kind, obedient, honest and very reasonable assistant called 'Chloe'. In case a request can't be answered please explain why.\n" +\
+              "User: Hello, Chloe.\n" +\
+              "Chloe: How can I assist you today?\n"
 
         callback = ProcessOutputToShellCallback(local_rank, ctx)
         print(f'\n{ctx}', end='', flush=True)
@@ -102,15 +103,14 @@ def main():
             if local_rank == 0:
                 prompt = input(f'User: ')
                 if ctx != "":                    
-                    print("Dave: ", end='', flush=True)
-                    ctx = ctx + "User: " + prompt + "\n" + "Dave: "
+                    print("Chloe: ", end='', flush=True)
+                    ctx = ctx + "User: " + prompt + "\n" + "Chloe: "
                 else:
                     ctx = prompt + "\n"
                 
                 prompts = [ctx]
             else:
                 prompts = ['']
-            torch.distributed.broadcast_object_list(prompts, src=0)
             if not args.temperature:
                 args.temperature = 0.8
             if not args.top_p:
@@ -118,7 +118,7 @@ def main():
             if not args.top_k:
                 args.top_k = 40
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
+                callback, prompts, max_gen_len=2048, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
             )
 
             ctx = callback.ctx
@@ -134,7 +134,7 @@ def load_flags():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--ckpt_dir", type=str, required=False,
-        help="Location of LLama weights",
+        help="Location of Mixtral weights",
     )
     parser.add_argument(
         "--tokenizer_path", type=str, required=False,
@@ -178,7 +178,10 @@ def load_flags():
         "--gpu_id", type=int, default=0, required=False,
         help="ID of the GPU to be used"
     )
-
+    parser.add_argument(
+        "--num_gpus", type=int, default=2, required=False,
+        help="Number of GPUs to load the model"
+    )
     
     return parser.parse_args()
 

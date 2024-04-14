@@ -2,22 +2,15 @@
 # This software may be used and distributed according to the terms of the Llama 2 Community License Agreement.
 
 import json
-import os
-import sys
 import time
 from pathlib import Path
 from typing import List, Literal, Optional, Tuple, TypedDict
 
 import torch
 import torch.nn.functional as F
-from fairscale.nn.model_parallel.initialize import (
-    get_model_parallel_rank,
-    initialize_model_parallel,
-    model_parallel_is_initialized,
-)
 
-from llama.model import ModelArgs, Transformer
-from llama.tokenizer import Tokenizer
+from mixtral.model import ModelArgs, Transformer
+from mixtral.tokenizer import Tokenizer
 
 Role = Literal["system", "user", "assistant"]
 
@@ -48,18 +41,19 @@ SPECIAL_TAGS = [B_INST, E_INST, "<<SYS>>", "<</SYS>>"]
 UNSAFE_ERROR = "Error: special tags are not allowed as part of the prompt."
 
 
-class Llama:
+class Mixtral:
     @staticmethod
     def build(
         ckpt_dir: str,
         tokenizer_path: str,
         max_seq_len: int,
         max_batch_size: int,
-        gpu_id: int = 0,
+        num_gpus: int,
         model_parallel_size: Optional[int] = None,
-    ) -> "Llama":
+        seed: int = 1,
+    ) -> "Mixtral":
         """
-        Build a Llama instance by initializing and loading a pre-trained model.
+        Build a Mixtral instance by initializing and loading a pre-trained model.
 
         Args:
             ckpt_dir (str): Path to the directory containing checkpoint files.
@@ -70,7 +64,7 @@ class Llama:
                 If not provided, it's determined from the environment. Defaults to None.
 
         Returns:
-            Llama: An instance of the Llama class with the loaded model and tokenizer.
+            Mixtral: An instance of the Mixtral class with the loaded model and tokenizer.
 
         Raises:
             AssertionError: If there are no checkpoint files in the specified directory,
@@ -81,51 +75,37 @@ class Llama:
             and loads the pre-trained model and tokenizer.
 
         """
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group("nccl")
-        if not model_parallel_is_initialized():
-            if model_parallel_size is None:
-                model_parallel_size = int(os.environ.get("WORLD_SIZE", 1))
-            initialize_model_parallel(model_parallel_size)
-
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-
-        torch.cuda.set_device(local_rank + gpu_id)
+        model_parallel_size = 1
 
         # seed must be the same in all processes
-        #torch.manual_seed(1)
-
-        if local_rank > 0:
-            sys.stdout = open(os.devnull, "w")
+        torch.manual_seed(seed)
 
         start_time = time.time()
-        checkpoints = sorted(Path(ckpt_dir).glob(f'merged.{model_parallel_size}GPUs.*.pth'))
-        if model_parallel_size != len(checkpoints):
-            checkpoints = sorted(Path(ckpt_dir).glob(f'consolidated.*.pth'))
-        print('checkpoints', checkpoints)
-
+        checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
         assert len(checkpoints) > 0, f"no checkpoint files found in {ckpt_dir}"
         assert model_parallel_size == len(
             checkpoints
         ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {model_parallel_size}"
-        ckpt_path = checkpoints[get_model_parallel_rank()]
-        checkpoint = torch.load(ckpt_path, map_location="cpu")
+        ckpt_path = checkpoints[0]
         with open(Path(ckpt_dir) / "params.json", "r") as f:
             params = json.loads(f.read())
 
         model_args: ModelArgs = ModelArgs(
             max_seq_len=max_seq_len,
             max_batch_size=max_batch_size,
+            num_gpus=num_gpus,
             **params,
         )
         tokenizer = Tokenizer(model_path=tokenizer_path)
         model_args.vocab_size = tokenizer.n_words
         torch.set_default_tensor_type(torch.cuda.HalfTensor)
         model = Transformer(model_args)
+        print(f"=== created Mixtral 8x7B. Experts spread over {num_gpus} GPUs ===")
+        checkpoint = torch.load(ckpt_path, map_location="cpu")
         model.load_state_dict(checkpoint, strict=False)
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
 
-        return Llama(model, tokenizer)
+        return Mixtral(model, tokenizer)
 
     def __init__(self, model: Transformer, tokenizer: Tokenizer):
         self.model = model
@@ -249,7 +229,6 @@ class Llama:
 
         return generated_texts
 
-
     @torch.inference_mode()
     def generate(
         self,
@@ -257,7 +236,6 @@ class Llama:
         max_gen_len: int,
         temperature: float = 0.6,
         top_p: float = 0.9,
-        top_k: int = 40,
         logprobs: bool = False,
         echo: bool = False,
     ) -> Tuple[List[List[int]], Optional[List[List[float]]]]:
@@ -312,7 +290,7 @@ class Llama:
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             if temperature > 0:
                 probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_token = sample_top_k(probs, top_p, top_k)
+                next_token = sample_top_k(probs, top_p)
             else:
                 next_token = torch.argmax(logits[:, -1], dim=-1)
 
@@ -354,13 +332,12 @@ class Llama:
             out_tokens.append(toks)
             out_logprobs.append(probs)
         return (out_tokens, out_logprobs if logprobs else None)
-    
+
     def text_completion(
         self,
         prompts: List[str],
         temperature: float = 0.6,
         top_p: float = 0.9,
-        top_k: int = 40,
         max_gen_len: Optional[int] = None,
         logprobs: bool = False,
         echo: bool = False,
@@ -393,7 +370,6 @@ class Llama:
             max_gen_len=max_gen_len,
             temperature=temperature,
             top_p=top_p,
-            top_k=top_k,
             logprobs=logprobs,
             echo=echo,
         )
@@ -522,7 +498,7 @@ class Llama:
         ]
 
 
-def sample_top_k(probs, top_p=0.0, top_k=40):
+def sample_top_k(probs, top_p, top_k=0):
     if top_k > 0:
         probs_sort, probs_idx = torch.topk(probs, top_k)
     else:
