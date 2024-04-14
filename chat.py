@@ -14,7 +14,7 @@ import random
 import numpy as np
 
 WORKER_JOB_TYPE = "llama2"
-WORKER_AUTH_KEY = "5b07e305b50505ca2b3284b4ae5f65d1"
+WORKER_AUTH_KEY = "66745b07e305b50505ca2b3284b4ae5f65d1"
 VERSION = 0
 
 def main():
@@ -118,7 +118,7 @@ def main():
             if not args.top_k:
                 args.top_k = 40
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
+                callback, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
             )
 
             ctx = callback.ctx
