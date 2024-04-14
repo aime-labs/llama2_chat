@@ -8,7 +8,7 @@ More Information about the Mixtral Model: https://mistral.ai/news/mixtral-of-exp
 
 The Mixtral 8x7B Model is licensed under Apache 2.0 and downloadable at: https://models.mistralcdn.com/mixtral-8x7b-v0-1/Mixtral-8x7B-v0.1-Instruct.tar
 
-The code is based on the original Llama codebase.
+The inference implementation is based on the original Llama codebase.
 
 ## Hardware Requirements
 
