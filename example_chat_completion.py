@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import fire
 
-from mixtral import Mixtral, Dialog
+from llama import Llama, Dialog
 
 
 def main(
@@ -16,7 +16,6 @@ def main(
     max_seq_len: int = 512,
     max_batch_size: int = 8,
     max_gen_len: Optional[int] = None,
-    num_gpus: int = 2,
 ):
     """
     Entry point of the program for generating text using a pretrained model.
@@ -33,12 +32,11 @@ def main(
         max_gen_len (int, optional): The maximum length of generated sequences. If None, it will be
             set to the model's max sequence length. Defaults to None.
     """
-    generator = Mixtral.build(
+    generator = Llama.build(
         ckpt_dir=ckpt_dir,
         tokenizer_path=tokenizer_path,
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
-        num_gpus=num_gpus,
     )
 
     dialogs: List[Dialog] = [
