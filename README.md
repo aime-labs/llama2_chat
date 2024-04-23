@@ -4,54 +4,23 @@ We are unlocking the power of large language models. Our latest version of Llama
 
 This release includes model weights and starting code for pretrained and fine-tuned Llama language models — ranging from 7B to 70B parameters.
 
-This repository is intended as a minimal example to load [Llama 2](https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/) models and run inference. For more detailed examples leveraging Hugging Face, see [llama-recipes](https://github.com/facebookresearch/llama-recipes/).
+This repository is intended to run LLama 2 models as worker for the [AIME API Server](https://github.com/aime-team/aime-api-server) also an interactive console chat for testing purpose is available.
 
-## Setup with [AIME MLC](https://github.com/aime-team/aime-ml-containers)
+Llama 2 API demo server running at: [https://api.aime.info/llama2-chat/](https://api.aime.info/llama2-chat/)
 
-Easy installation within an [AIME ML-Container](https://github.com/aime-team/aime-ml-containers).
+## Features
 
-Create an AIME ML container:
-```mlc-create mycontainer Pytorch 2.0.1```
-Once done open the container with:
-```mlc-open mycontainer```
-Navigate to the destination of the repo and install the required pip packages
-```
-cd llama2_chat
-pip install -r requirements.txt
-```
-
-## Start Chat in Command Line
-Run the chat mode in the command line with following command:
-```
-torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
-```
-
-## Start Llama2 Chat as AIME API Worker
-
-To run Llama2 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
-
-```
-torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
-```
-It will start Llama2 as worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
-
-## Download
-
-In order to download the model weights and tokenizer, please visit the [Meta AI website](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) and accept our License.
-
-Once your request is approved, you will receive a signed URL over email. Then run the download.sh script, passing the URL provided when prompted to start the download.
-
-Pre-requisites: Make sure you have `wget` and `md5sum` installed. Then to run the script: `./download.sh`.
-
-Keep in mind that the links expire after 24 hours and a certain amount of downloads. If you start seeing errors such as `403: Forbidden`, you can always re-request a link.
-
-### Access on Hugging Face
-
-We are also providing downloads on [Hugging Face](https://huggingface.co/meta-llama). You must first request a download from the Meta AI website using the same email address as your Hugging Face account. After doing so, you can request access to any of the models on Hugging Face and within 1-2 days your account will be granted access to all versions.
+* Realtime interactive console chat example
+* Llama 2 13B support for 1 GPU with at least 40GB memory (e.g. RTX A6000/6000 Ada/A100) setups
+* Llama 2 70B support for 2 GPU (e.g. 2x A100/H100 80 GB) and 4 GPU (e.g. 4x A100 40GB/RTX A6000/6000 Ada) setups
+* Worker mode for AIME API server to use Llama 2 as HTTP/HTTPS API endpoint
+* Batch job aggreation support for AIME API server for higher GPU throughput with multi-user chat
 
 ## Quick Start
 
 You can follow the steps below to quickly get up and running with Llama 2 models. These steps will let you run quick inference locally. For more examples, see the [Llama 2 recipes repository](https://github.com/facebookresearch/llama-recipes). 
+
+### Setup with Conda Environment
 
 1. In a conda env with PyTorch / CUDA available clone and download this repository.
 
@@ -59,6 +28,25 @@ You can follow the steps below to quickly get up and running with Llama 2 models
     ```bash
     pip install -e .
     ```
+
+### Alternative setup with [AIME MLC](https://github.com/aime-team/aime-ml-containers)
+
+Easy installation within an [AIME ML-Container](https://github.com/aime-team/aime-ml-containers).
+
+1. Create and open an AIME ML container:
+
+```mlc-create mycontainer Pytorch 2.0.1```
+Once done open the container with:
+```mlc-open mycontainer```
+
+2. Navigate to the destination of the repo and install the required pip packages
+```
+cd llama2_chat
+pip install -r requirements.txt
+```
+
+### Download Model
+
 3. Visit the [Meta AI website](https://ai.meta.com/resources/models-and-libraries/llama-downloads/) and register to download the model/s.
 
 4. Once registered, you will get an email with a URL to download the models. You will need this URL when you run the download.sh script.
@@ -68,18 +56,48 @@ You can follow the steps below to quickly get up and running with Llama 2 models
     - During this process, you will be prompted to enter the URL from the email. 
     - Do not use the “Copy Link” option but rather make sure to manually copy the link from the email.
 
-6. Once the model/s you want have been downloaded, you can run the model locally using the command below:
-```bash
-torchrun --nproc_per_node 1 example_chat_completion.py \
-    --ckpt_dir llama-2-7b-chat/ \
-    --tokenizer_path tokenizer.model \
-    --max_seq_len 512 --max_batch_size 6
+Pre-requisites: Make sure you have `wget` and `md5sum` installed. Then to run the script: `./download.sh`.
+
+Keep in mind that the links expire after 24 hours and a certain amount of downloads. If you start seeing errors such as `403: Forbidden`, you can always re-request a link.
+
+#### 6. Convert 13B models for 1 GPU or 70B models for 2 or 4 GPU configuration (if required)
+The default sharding configuration of the downloaded Llama 3 70B model weights is for 8 GPUs (with 24 GB memory). The weights for a 4 or 2 GPU setups can be converted with the 'convert_weights.py' script.
+
+To do so run following command:
+
 ```
+python convert_weights.py --input_dir /data/models/llama-2-70b-chat/ --model_size 70B --num_gpus <num_gpus>
+```
+
+For Llama2 13B model <num_gpus> can be:
+
+- 1 for 1x at least 40 GB memory per GPU
+
+For Llama2 70B model <num_gpus> can be:
+
+- 4 for 4x at least 40 GB memory per GPU
+- 2 for 2x at least 80 GB memory per GPU
+
+#### 7a. Start Chat in Command Line
+Run the chat mode in the command line with following command:
+```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints>
+```
+
+#### 7b. Start Llama2 Chat as AIME API Worker
+
+To run Llama2 Chat as HTTP/HTTPS API with [AIME API Server](https://github.com/aime-team/aime-api-server) start the chat command with following command line:
+
+```
+torchrun --nproc_per_node <num_gpus> chat.py --ckpt_dir <destination_of_checkpoints> --api_server <url to api server>
+```
+It will start Llama2 as worker, waiting for job request through the AIME API Server. Use the --max_batch_size option to control how many parallel job requests can be handled (depending on the available GPU memory). 
+```
+
 **Note**
 - Replace  `llama-2-7b-chat/` with the path to your checkpoint directory and `tokenizer.model` with the path to your tokenizer model.
 - The `–nproc_per_node` should be set to the [MP](#inference) value for the model you are using.
 - Adjust the `max_seq_len` and `max_batch_size` parameters as needed.
-- This example runs the [example_chat_completion.py](example_chat_completion.py) found in this repository but you can change that to a different .py file.
 
 ## Inference
 
