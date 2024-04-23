@@ -88,8 +88,8 @@ Different models require different model-parallel (MP) values:
 |  Model | MP |
 |--------|----|
 | 7B     | 1  |
-| 13B    | 2  |
-| 70B    | 8  |
+| 13B    | 2, 1 (for 1 the weights have to be converted with convert_weights.py first) |
+| 70B    | 8, 4, 2 (for 4 and 2 the weights have to be converted with convert_weights.py first) |
 
 All models support sequence length up to 4096 tokens, but we pre-allocate the cache according to `max_seq_len` and `max_batch_size` values. So set those according to your hardware.
 
