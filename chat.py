@@ -92,7 +92,7 @@ def main():
             print('Done')
     else:
         
-        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
+        ctx = "A dialog, where User interacts with a helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
               "User: Hello, Dave.\n" +\
               "Dave: How can I assist you today?\n"
 
