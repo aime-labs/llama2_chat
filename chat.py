@@ -92,7 +92,7 @@ def main():
             print('Done')
     else:
         
-        ctx = "A dialog, where User interacts with an helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
+        ctx = "A dialog, where User interacts with a helpful, kind, obedient, honest and very reasonable assistant called Dave.\n" +\
               "User: Hello, Dave.\n" +\
               "Dave: How can I assist you today?\n"
 
@@ -118,7 +118,7 @@ def main():
             if not args.top_k:
                 args.top_k = 40
             results = generator.generate_realtime(
-                callback.process_output, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
+                callback, prompts, max_gen_len=1024, temperatures=[args.temperature], top_ps=[args.top_p], top_ks=[args.top_k], repetition_penalty=args.repetition_penalty
             )
 
             ctx = callback.ctx
